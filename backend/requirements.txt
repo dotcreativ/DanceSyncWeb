@@ -4,3 +4,4 @@ requests
 librosa
 numpy
 scipy
+Flask-Cors
