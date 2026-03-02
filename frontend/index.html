@@ -59,7 +59,7 @@
             formData.append('audio', new Blob([audioData.buffer], { type: 'audio/mp3' }), 'audio.mp3');
 
             // --- IMPORTANT: Update this URL to your Render backend URL ---
-            const backendUrl = 'YOUR_RENDER_BACKEND_URL.onrender.com'; 
+            const backendUrl = 'https://dancesync-backend.onrender.com'; 
             // ------------------------------------------------------------
 
             const response = await fetch(`${backendUrl}/sync`, {
