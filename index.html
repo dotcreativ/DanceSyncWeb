@@ -58,8 +58,15 @@
             const formData = new FormData();
             formData.append('audio', new Blob([audioData.buffer], { type: 'audio/mp3' }), 'audio.mp3');
 
-            // --- IMPORTANT: Update this URL to your Render backend URL ---
-            const backendUrl = 'https://dancesync-backend.onrender.com'; 
+            // --- IMPORTANT: use the same host/port serving the frontend ---
+            // this lets you run the frontend from localhost or via a static host
+            // without having to hard-code the backend address.
+            let backendUrl = window.location.origin;
+            if (backendUrl === 'null' || !backendUrl) {
+                // when opening the file directly (file://), origin is "null"; fall
+                // back to localhost port 10000 which is our default dev server.
+                backendUrl = 'http://localhost:10000';
+            }
             // ------------------------------------------------------------
 
             const response = await fetch(`${backendUrl}/sync`, {
@@ -68,11 +75,14 @@
             });
 
             if (response.ok) {
-                status.innerText = "Audio synced! Processing final video...";
+                // read JSON to get server message
+                const data = await response.json();
+                status.innerText = data.message || "Audio synced!";
                 // (Advanced: FFmpeg.wasm would now merge the returned audio back to video)
-                alert("Audio synced! Check console for next steps.");
+                console.log('server response:', data);
             } else {
                 status.innerText = "Error syncing audio.";
+                console.error('sync failed', response.status, await response.text());
             }
         }
     </script>

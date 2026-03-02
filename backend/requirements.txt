@@ -1,3 +1,5 @@
+# note: ffmpeg is required by app.py but isn’t a Python package
+#       install it via your OS package manager (brew, apt, etc.)
 Flask
 gunicorn
 requests

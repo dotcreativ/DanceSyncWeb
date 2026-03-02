@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Backend Test</title>
+</head>
+<body>
+	<h1>Upload Audio/Video to /sync</h1>
+	<form id="uploadForm">
+		<input type="file" name="audio" id="fileInput" />
+		<button type="submit">Send</button>
+	</form>
+	<pre id="result"></pre>
+	<script>
+		document.getElementById('uploadForm').addEventListener('submit', async e => {
+			e.preventDefault();
+			const form = e.target;
+			const data = new FormData(form);
+			const res = await fetch('/sync', { method:'POST', body: data});
+			const txt = await res.text();
+			document.getElementById('result').innerText = txt;
+		});
+	</script>
+</body>
+</html>

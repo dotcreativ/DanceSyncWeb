@@ -10,5 +10,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Run the app directly using flask, not gunicorn
-CMD ["flask", "run", "--host=0.0.0.0", "--port=10000"]
+# Run the app with gunicorn so that production logs (and Render) match
+# expectations and the PORT env var is respected by the config file.
+CMD ["gunicorn", "app:app", "-c", "gunicorn_conf.py"]

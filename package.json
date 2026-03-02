@@ -1,0 +1,11 @@
+{
+  "name": "dancesync-web",
+  "version": "1.0.0",
+  "description": "Static frontend for DanceSync project",
+  "scripts": {
+    "serve": "npx http-server -c-1 . -p 8000"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}
