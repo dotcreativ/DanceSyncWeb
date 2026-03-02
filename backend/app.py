@@ -50,6 +50,10 @@ def create_app():
 
 app = create_app()
 
+
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    # Waitress needs to know the port, but Render sets it via the environment
+    port = int(os.environ.get("PORT", 10000))                
+    from waitress import serve
+    print(f"Running on port {port}")
+    serve(app, host='0.0.0.0', port=port)
