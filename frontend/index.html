@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DanceSync Mobile</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        button { padding: 10px 20px; font-size: 16px; margin-top: 20px; }
+        #status { margin-top: 20px; font-weight: bold; color: blue; }
+    </style>
+</head>
+<body>
+    <h1>DanceSync</h1>
+    <p>Upload your dance video to sync HQ audio</p>
+    
+    <input type="file" id="videoInput" accept="video/*">
+    <br>
+    <button onclick="processVideo()">Sync Audio</button>
+    
+    <p id="status"></p>
+
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: true });
+
+        async function processVideo() {
+            const status = document.getElementById('status');
+            const fileInput = document.getElementById('videoInput');
+            
+            if (fileInput.files.length === 0) {
+                alert("Please select a video file.");
+                return;
+            }
+
+            status.innerText = "Loading FFmpeg (this takes a moment)...";
+            if (!ffmpeg.isLoaded()) {
+                await ffmpeg.load();
+            }
+
+            const videoFile = fileInput.files[0];
+            status.innerText = "Extracting audio from video...";
+
+            // 1. Write file to FFmpeg virtual file system
+            ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(videoFile));
+
+            // 2. Extract Audio (this runs on your phone!)
+            await ffmpeg.run('-i', 'input.mp4', '-vn', '-acodec', 'libmp3lame', 'output.mp3');
+
+            // 3. Read the extracted audio
+            const audioData = ffmpeg.FS('readFile', 'output.mp3');
+            
+            status.innerText = "Uploading audio to server for syncing...";
+
+            // 4. Upload audio to your backend
+            const formData = new FormData();
+            formData.append('audio', new Blob([audioData.buffer], { type: 'audio/mp3' }), 'audio.mp3');
+
+            // --- IMPORTANT: Update this URL to your Render backend URL ---
+            const backendUrl = 'YOUR_RENDER_BACKEND_URL.onrender.com'; 
+            // ------------------------------------------------------------
+
+            const response = await fetch(`${backendUrl}/sync`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                status.innerText = "Audio synced! Processing final video...";
+                // (Advanced: FFmpeg.wasm would now merge the returned audio back to video)
+                alert("Audio synced! Check console for next steps.");
+            } else {
+                status.innerText = "Error syncing audio.";
+            }
+        }
+    </script>
+</body>
+</html>
