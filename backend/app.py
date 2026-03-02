@@ -72,6 +72,5 @@ def upload_video():
             return jsonify({'error': 'Failed to process video'}), 500
 
 if __name__ == '__main__':
-    # Use Render's assigned port, default to 10000
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    # Use 0.0.0.0 and port 10000 for Docker
+    app.run(host='0.0.0.0', port=10000)
