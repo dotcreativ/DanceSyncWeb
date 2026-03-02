@@ -1,38 +1,52 @@
-from flask import Flask, request, send_file, jsonify
 import os
-import werkzeug
+import subprocess
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
-# Create a folder to store uploads temporarily
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-@app.route('/')
-def home():
-    return "DanceSync Backend is Running."
-
-@app.route('/sync', methods=['POST'])
-def sync_audio():
-    if 'audio' not in request.files:
-        return jsonify({"error": "No audio file provided"}), 400
+@app.route('/upload', methods=['POST'])
+def upload_video():
+    if 'video' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
     
-    file = request.files['audio']
-    filename = werkzeug.utils.secure_filename(file.filename)
-    input_path = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(input_path)
+    file = request.files['video']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
 
-    # ---------------------------------------------------------
-    # PLACEHOLDER: This is where the magic will happen later
-    # ---------------------------------------------------------
-    print(f"Received file: {input_path}")
-    
-    # For now, we just send the same file back to test the connection
-    output_path = input_path
-    # ---------------------------------------------------------
-
-    return send_file(output_path, as_attachment=True)
+    if file:
+        print("Processing started...") # This will show in Render logs
+        
+        # Save input file
+        input_path = "input_video.mp4"
+        output_path = "output_audio.mp3"
+        file.save(input_path)
+        
+        # FFmpeg command to extract audio (faster method)
+        command = [
+            'ffmpeg', '-i', input_path, 
+            '-vn', '-acodec', 'libmp3lame', 
+            '-y', output_path
+        ]
+        
+        try:
+            # Run FFmpeg
+            subprocess.run(command, check=True)
+            print("FFmpeg finished successfully.") # Logs progress
+            
+            # Here we would normally add song recognition
+            result = "Audio extracted! (Song recognition coming next)"
+            
+            # Clean up
+            os.remove(input_path)
+            # os.remove(output_path) # Keep this if you want to analyze it later
+            
+            return jsonify({'message': result})
+            
+        except subprocess.CalledProcessError as e:
+            print(f"FFmpeg error: {e}")
+            return jsonify({'error': 'Failed to process video'}), 500
 
 if __name__ == '__main__':
-    # Render will use gunicorn, this is just for testing locally
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=10000)
