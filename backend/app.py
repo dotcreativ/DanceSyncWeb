@@ -1,5 +1,8 @@
 import os
 import subprocess
+@app.route('/', methods=['GET'])
+def health_check():
+    return "DanceSync Backend is Running", 200
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
