@@ -33,7 +33,7 @@ def health_check():
 
 @app.route('/upload', methods=['POST'])
 def upload_video():
-    # Frontend sends audio as 'video' field
+    # Frontend sends video as 'video' field
     if 'video' not in request.files:
         return jsonify({'error': 'No file part'}), 400
     

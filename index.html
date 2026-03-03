@@ -20,12 +20,7 @@
     
     <p id="status"></p>
 
-    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-    
     <script>
-        const { createFFmpeg, fetchFile } = FFmpeg;
-        const ffmpeg = createFFmpeg({ log: true });
-
         async function processVideo() {
             const status = document.getElementById('status');
             const fileInput = document.getElementById('videoInput');
@@ -35,29 +30,12 @@
                 return;
             }
 
-            status.innerText = "Loading FFmpeg (this takes a moment)...";
-            if (!ffmpeg.isLoaded()) {
-                await ffmpeg.load();
-            }
+            status.innerText = "Uploading video to server... (this takes a moment)";
 
             const videoFile = fileInput.files[0];
-            status.innerText = "Extracting audio from video...";
-
-            // 1. Write file to FFmpeg virtual file system
-            ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(videoFile));
-
-            // 2. Extract Audio (runs on phone)
-            await ffmpeg.run('-i', 'input.mp4', '-vn', '-acodec', 'libmp3lame', 'output.mp3');
-
-            // 3. Read the extracted audio
-            const audioData = ffmpeg.FS('readFile', 'output.mp3');
-            
-            status.innerText = "Uploading audio to server for syncing...";
-
-            // 4. Upload audio to your backend
             const formData = new FormData();
-            // --- CRUCIAL: Must match backend's request.files['video'] ---
-            formData.append('video', new Blob([audioData.buffer], { type: 'audio/mp3' }), 'audio.mp3');
+            // Must match backend's request.files['video']
+            formData.append('video', videoFile);
 
             // --- FIXED: Point directly to Render ---
             const backendUrl = 'https://dancesync-backend.onrender.com';
@@ -71,11 +49,11 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    status.innerText = data.message || "Audio synced!";
+                    status.innerText = data.message || "Audio extracted!";
                     console.log('Server response:', data);
                 } else {
-                    status.innerText = "Error syncing audio (Server Error).";
-                    console.error('Sync failed', response.status);
+                    status.innerText = "Error extracting audio (Server Error).";
+                    console.error('Extraction failed', response.status);
                 }
             } catch (err) {
                 status.innerText = "Connection failed. Is the backend awake?";
