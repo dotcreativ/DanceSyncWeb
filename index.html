@@ -1,79 +1,87 @@
-import os
-import subprocess
-import threading
-import requests
-import time
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-
-app = Flask(__name__)
-# Crucial: Allow your GitHub Pages site to talk to this server
-CORS(app, resources={r"/*": {"origins": "https://dotcreativ.github.io"}})
-
-# --- KEEP-ALIVE MECHANISM ---
-# Prevents Render from shutting down the service due to inactivity
-def keep_alive():
-    """Sends a request to the server every 5 minutes to keep it awake."""
-    while True:
-        try:
-            # Replace with your actual Render service URL
-            requests.get("https://dancesync-backend.onrender.com")
-            print("Pinged server to keep alive.")
-        except Exception as e:
-            print(f"Keep-alive error: {e}")
-        time.sleep(300) # Sleep for 5 minutes
-
-# Start the keep-alive thread
-threading.Thread(target=keep_alive, daemon=True).start()
-# -----------------------------------
-
-@app.route('/', methods=['GET'])
-def health_check():
-    return "DanceSync Backend is Running", 200
-
-@app.route('/upload', methods=['POST'])
-def upload_video():
-    # Frontend sends audio as 'video' field
-    if 'video' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DanceSync Mobile</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        button { padding: 10px 20px; font-size: 16px; margin-top: 20px; }
+        #status { margin-top: 20px; font-weight: bold; color: blue; }
+    </style>
+</head>
+<body>
+    <h1>DanceSync</h1>
+    <p>Upload your dance video to sync HQ audio</p>
     
-    file = request.files['video']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+    <input type="file" id="videoInput" accept="video/*">
+    <br>
+    <button onclick="processVideo()">Sync Audio</button>
+    
+    <p id="status"></p>
 
-    if file:
-        print("Processing started...") 
-        
-        # Save input file
-        input_path = "input_video.mp4"
-        output_path = "output_audio.mp3"
-        file.save(input_path)
-        
-        # FFmpeg command to extract audio
-        command = [
-            'ffmpeg', '-i', input_path, 
-            '-vn', '-acodec', 'libmp3lame', 
-            '-y', output_path
-        ]
-        
-        try:
-            # Run FFmpeg
-            subprocess.run(command, check=True)
-            print("FFmpeg finished successfully.")
-            
-            result = "Audio extracted! (Song recognition coming next)"
-            
-            # Clean up files to save space on Render
-            if os.path.exists(input_path):
-                os.remove(input_path)
-            
-            return jsonify({'message': result})
-            
-        except subprocess.CalledProcessError as e:
-            print(f"FFmpeg error: {e}")
-            return jsonify({'error': 'Failed to process video'}), 500
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: true });
 
-if __name__ == '__main__':
-    # Use Render's assigned port, default to 10000
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+        async function processVideo() {
+            const status = document.getElementById('status');
+            const fileInput = document.getElementById('videoInput');
+            
+            if (fileInput.files.length === 0) {
+                alert("Please select a video file.");
+                return;
+            }
+
+            status.innerText = "Loading FFmpeg (this takes a moment)...";
+            if (!ffmpeg.isLoaded()) {
+                await ffmpeg.load();
+            }
+
+            const videoFile = fileInput.files[0];
+            status.innerText = "Extracting audio from video...";
+
+            // 1. Write file to FFmpeg virtual file system
+            ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(videoFile));
+
+            // 2. Extract Audio (runs on phone)
+            await ffmpeg.run('-i', 'input.mp4', '-vn', '-acodec', 'libmp3lame', 'output.mp3');
+
+            // 3. Read the extracted audio
+            const audioData = ffmpeg.FS('readFile', 'output.mp3');
+            
+            status.innerText = "Uploading audio to server for syncing...";
+
+            // 4. Upload audio to your backend
+            const formData = new FormData();
+            // --- CRUCIAL: Must match backend's request.files['video'] ---
+            formData.append('video', new Blob([audioData.buffer], { type: 'audio/mp3' }), 'audio.mp3');
+
+            // --- FIXED: Point directly to Render ---
+            const backendUrl = 'https://dancesync-backend.onrender.com';
+
+            try {
+                // --- FIXED: Use /upload endpoint ---
+                const response = await fetch(`${backendUrl}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    status.innerText = data.message || "Audio synced!";
+                    console.log('Server response:', data);
+                } else {
+                    status.innerText = "Error syncing audio (Server Error).";
+                    console.error('Sync failed', response.status);
+                }
+            } catch (err) {
+                status.innerText = "Connection failed. Is the backend awake?";
+                console.error('Fetch error:', err);
+            }
+        }
+    </script>
+</body>
+</html>
