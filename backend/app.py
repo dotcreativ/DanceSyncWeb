@@ -15,9 +15,9 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 # --- ACRCLOUD CONFIG ---
 ACR_CONFIG = {
-    'access_key': 'YOUR_ACR_ACCESS_KEY',
-    'access_secret': 'YOUR_ACR_ACCESS_SECRET',
-    'host': 'identify-eu-west-1.acrcloud.com', 
+    'access_key': 'd3c49529e1aff6b118376ea20df1f56e',
+    'access_secret': 'zeTVsyKXimOE8jLAo0gCJc7D3v37s4PT9fdCFylC',
+    'host': 'identify-us-west-2.acrcloud.com', 
 }
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
