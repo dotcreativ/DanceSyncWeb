@@ -2,6 +2,10 @@ import os
 import subprocess
 import requests
 import uuid
+import time
+import hashlib
+import hmac
+import base64
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import yt_dlp
@@ -10,18 +14,42 @@ app = Flask(__name__)
 CORS(app)
 
 # --- CONFIGURATION ---
-AUDD_API_TOKEN = "YOUR_ACTUAL_AUDD_KEY_HERE"
-# Using absolute paths for reliability on Render
+ACR_CONFIG = {
+    'access_key': 'd3c49529e1aff6b118376ea20df1f56e',
+    'access_secret': 'zeTVsyKXimOE8jLAo0gCJc7D3v37s4PT9fdCFylC',
+    'host': 'identify-us-west-2.acrcloud.com', # Check your ACR dashboard for your specific host
+}
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-@app.route('/')
-def health():
-    return "DanceSync Engine Active", 200
+def get_acr_signature(data_type, http_method, http_uri, access_key, access_secret, timestamp):
+    string_to_sign = '\n'.join([http_method, http_uri, access_key, data_type, "1", timestamp])
+    sign = base64.b64encode(hmac.new(access_secret.encode('ascii'), string_to_sign.encode('ascii'), hashlib.sha1).digest()).decode('ascii')
+    return sign
+
+def get_youtube_hq(query):
+    """Automatically finds the best HQ audio stream for the matched song."""
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'noplaylist': True,
+        'quiet': True,
+        'default_search': 'ytsearch1',
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(f"{query} official audio", download=False)
+            video = info['entries'][0]
+            return {
+                'url': video.get('url'),
+                'thumb': video.get('thumbnail')
+            }
+        except:
+            return None
 
 @app.route('/upload', methods=['POST'])
 def upload_video():
     if 'video' not in request.files:
-        return jsonify({'status': 'error', 'message': 'No video file provided'}), 400
+        return jsonify({'status': 'error', 'message': 'No video'}), 400
     
     unique_id = str(uuid.uuid4())[:8]
     video_path = os.path.join(BASE_DIR, f"vid_{unique_id}.mp4")
@@ -31,84 +59,56 @@ def upload_video():
         file = request.files['video']
         file.save(video_path)
 
-        # 1. Extract Clean Mono Audio (Faster for Recognition)
-        subprocess.run([
-            'ffmpeg', '-i', video_path, '-vn', 
-            '-ar', '22050', '-ac', '1', '-y', audio_path
-        ], check=True, capture_output=True)
+        # 1. Extract 15s of audio for ACRCloud Identification
+        subprocess.run(['ffmpeg', '-i', video_path, '-ss', '0', '-t', '15', '-vn', '-ar', '8000', '-ac', '1', '-y', audio_path], check=True)
 
-        # 2. Try AudD Recognition
-        with open(audio_path, 'rb') as f:
-            res = requests.post(
-                'https://api.audd.io/', 
-                data={'api_token': AUDD_API_TOKEN, 'return': 'apple_music'}, 
-                files={'file': f},
-                timeout=20
-            )
-            result = res.json()
+        # 2. ACRCloud Identify
+        timestamp = str(int(time.time()))
+        signature = get_acr_signature("audio", "POST", "/v1/identify", ACR_CONFIG['access_key'], ACR_CONFIG['access_secret'], timestamp)
+        
+        files = {'sample': open(audio_path, 'rb')}
+        data = {
+            'access_key': ACR_CONFIG['access_key'],
+            'sample_bytes': os.path.getsize(audio_path),
+            'timestamp': timestamp,
+            'signature': signature,
+            'data_type': 'audio',
+            "signature_version": "1"
+        }
 
-        if result.get('status') == 'success' and result.get('result'):
-            song = result['result']
+        acr_res = requests.post(f"http://{ACR_CONFIG['host']}/v1/identify", files=files, data=data, timeout=20).json()
+
+        if acr_res.get('status', {}).get('code') == 0:
+            music = acr_res['metadata']['music'][0]
+            title = music.get('title')
+            artist = music['artists'][0]['name']
+            # Convert offset ms to seconds (ACR is very precise)
+            offset_sec = music.get('play_offset_ms', 0) / 1000.0
+
+            # 3. Automatic YouTube Search for HQ Audio
+            yt_data = get_youtube_hq(f"{title} {artist}")
+            
             return jsonify({
                 'status': 'success',
-                'title': song.get('title'),
-                'artist': song.get('artist'),
-                'offset': song.get('offset'),
-                'preview_url': song.get('apple_music', {}).get('previews', [{}])[0].get('url'),
-                'album_art': song.get('apple_music', {}).get('artwork', {}).get('url', '').replace('{w}x{h}', '300x300'),
-                'video_file': f"vid_{unique_id}.mp4" # Pass back the filename for the merge step
+                'title': title,
+                'artist': artist,
+                'offset': str(offset_sec),
+                'preview_url': yt_data['url'] if yt_data else "",
+                'album_art': yt_data['thumb'] if yt_data else "",
+                'video_file': f"vid_{unique_id}.mp4"
             })
 
-        # 3. Automatic YouTube Fallback (If AudD Fails)
-        # We don't ask the user; we just try to find it.
-        return jsonify({'status': 'error', 'message': 'Match not found. Try a clearer clip.'}), 404
+        return jsonify({'status': 'error', 'message': 'ACRCloud could not identify song'}), 404
 
     except Exception as e:
-        print(f"Error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
     finally:
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
+        if os.path.exists(audio_path): os.remove(audio_path)
 
 @app.route('/merge', methods=['POST'])
 def merge_video():
-    data = request.json
-    preview_url = data.get('preview_url')
-    offset = data.get('offset', '00:00')
-    video_filename = data.get('video_file')
-    
-    video_input = os.path.join(BASE_DIR, video_filename)
-    audio_hq = os.path.join(BASE_DIR, f"hq_{video_filename}.mp3")
-    output_video = os.path.join(BASE_DIR, f"final_{video_filename}")
-
-    if not os.path.exists(video_input):
-        return jsonify({'error': 'Video session expired. Please upload again.'}), 400
-
-    try:
-        # Download HQ Track
-        r = requests.get(preview_url, stream=True)
-        with open(audio_hq, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        # FFmpeg Merge (Ultra-fast preset to avoid Render timeouts)
-        # We use -ss for audio offset to align with the dance
-        subprocess.run([
-            'ffmpeg', '-i', video_input, '-ss', offset, '-i', audio_hq,
-            '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac',
-            '-shortest', '-preset', 'ultrafast', '-y', output_video
-        ], check=True, capture_output=True)
-
-        return send_file(output_video, as_attachment=True)
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        # Cleanup all temp files after merge
-        for f in [video_input, audio_hq, output_video]:
-            if os.path.exists(f):
-                os.remove(f)
+    # ... (Keep your existing /merge route code here)
+    pass
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
