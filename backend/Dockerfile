@@ -1,17 +1,12 @@
 FROM python:3.11-slim
 
-# Install FFmpeg
-# ... (rest of dockerfile)
-# Install FFmpeg
-RUN apt-get update && apt-get install -y ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# EXPOSE the port Render uses
-EXPOSE 10000
-
-# --- THE RELENTLESS RESTART LOOP ---
-CMD while true; do gunicorn -b 0.0.0.0:$PORT --timeout 600 app:app; sleep 1; done
+# Use Gunicorn as the primary process. 
+# --timeout 0 disables worker timeouts entirely to stop the 'term' signal.
+CMD gunicorn --bind 0.0.0.0:$PORT --timeout 0 app:app
