@@ -43,52 +43,47 @@
         let currentData = null;
 
         async function processVideo() {
-            const status = document.getElementById('status');
-            const file = document.getElementById('videoInput').files[0];
-            if(!file) return;
+    const status = document.getElementById('status');
+    const resultDiv = document.getElementById('result');
+    const file = document.getElementById('videoInput').files[0];
+    
+    if(!file) return alert("Please select a video first!");
 
-            status.innerText = "Processing... (This takes 30-60s)";
-            const formData = new FormData();
-            formData.append('video', file);
+    // Reset UI
+    status.innerText = "Processing... (Finding a match)";
+    resultDiv.style.display = 'none';
+    document.getElementById('previewVideo').src = URL.createObjectURL(file);
 
-            try {
-                const response = await fetch('https://dancesync-backend.onrender.com/upload', { method: 'POST', body: formData });
-                currentData = await response.json();
+    const formData = new FormData();
+    formData.append('video', file);
 
-                if (currentData.status === 'success') {
-                    status.innerText = "Matched!";
-                    document.getElementById('result').style.display = 'block';
-                    document.getElementById('downloadBtn').style.display = 'block';
-                    document.getElementById('songTitle').innerText = currentData.title;
-                    document.getElementById('songArtist').innerText = currentData.artist;
-                    document.getElementById('albumArt').src = currentData.album_art;
-                    document.getElementById('previewVideo').src = URL.createObjectURL(file);
-                }
-            } catch (e) { status.innerText = "Error!"; }
-        }
+    try {
+        const response = await fetch('https://dancesync-backend.onrender.com/upload', { 
+            method: 'POST', 
+            body: formData 
+        });
+        
+        const data = await response.json();
 
-        document.getElementById('downloadBtn').onclick = async () => {
-            const status = document.getElementById('status');
-            status.innerText = "Building your HQ video...";
+        if (response.ok && data.status === 'success') {
+            status.innerText = "Match Found!";
+            currentData = data; // Store for the download/merge step
             
-            const response = await fetch('https://dancesync-backend.onrender.com/merge', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    preview_url: currentData.preview_url,
-                    offset: currentData.offset
-                })
-            });
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = "DanceSync_HQ.mp4";
-            document.body.appendChild(a);
-            a.click();
-            status.innerText = "Downloaded!";
-        };
+            resultDiv.style.display = 'block';
+            document.getElementById('downloadBtn').style.display = 'block';
+            document.getElementById('songTitle').innerText = data.title;
+            document.getElementById('songArtist').innerText = data.artist;
+            document.getElementById('albumArt').src = data.album_art;
+        } else {
+            // This is where it was getting stuck!
+            status.innerText = "❌ No match found. Try a clearer audio clip.";
+            console.log("Server response:", data);
+        }
+    } catch (e) { 
+        status.innerText = "❌ Connection Error. Is the backend awake?"; 
+        console.error(e);
+    }
+}
     </script>
 </body>
 </html>
