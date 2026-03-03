@@ -16,4 +16,4 @@ COPY . .
 EXPOSE 10000
 
 # Start Gunicorn and bind to the PORT environment variable
-CMD gunicorn --bind 0.0.0.0:$PORT --timeout 0 app:app
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120 app:app
