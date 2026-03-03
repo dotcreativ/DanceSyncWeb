@@ -5,85 +5,268 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DanceSync Pro</title>
     <style>
-        body { font-family: -apple-system, sans-serif; text-align: center; padding: 20px; background: #000; color: #fff; }
-        .container { max-width: 400px; margin: auto; }
-        .btn { background: #fff; color: #000; border: none; padding: 18px; border-radius: 40px; font-weight: bold; margin-top: 15px; width: 100%; font-size: 16px; cursor: pointer; display: block; }
-        .btn-download { background: #00FF7F; margin-top: 10px; display: none; }
-        #status { margin-top: 25px; color: #888; font-size: 12px; text-transform: uppercase; }
-        #result { display: none; margin-top: 20px; }
-        video { width: 100%; border-radius: 20px; background: #111; }
-        .song-card { display: flex; align-items: center; gap: 15px; background: #111; padding: 15px; border-radius: 15px; margin: 15px 0; text-align: left; }
-        .song-card img { width: 50px; height: 50px; border-radius: 8px; }
+        :root {
+            --primary: #00FF7F;
+            --bg: #0a0a0a;
+            --card: #161616;
+            --text: #ffffff;
+            --text-dim: #888888;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            margin-bottom: 30px;
+        }
+
+        /* Buttons */
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 12px;
+        }
+
+        .btn-select {
+            background-color: #ffffff;
+            color: #000000;
+        }
+
+        .btn-sync {
+            background-color: #222;
+            color: #fff;
+        }
+
+        .btn-download {
+            background-color: var(--primary);
+            color: #000;
+            display: none;
+            margin-top: 20px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Status Text */
+        #status {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 20px 0;
+            min-height: 1.2rem;
+        }
+
+        /* Result Section */
+        #result {
+            display: none;
+            width: 100%;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        video {
+            width: 100%;
+            border-radius: 16px;
+            background: #000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .song-card {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: var(--card);
+            padding: 15px;
+            border-radius: 16px;
+            margin-top: 15px;
+            text-align: left;
+            border: 1px solid #222;
+        }
+
+        .song-card img {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            object-fit: cover;
+        }
+
+        .song-info b {
+            display: block;
+            font-size: 1.1rem;
+            margin-bottom: 2px;
+        }
+
+        .song-info span {
+            color: var(--text-dim);
+            font-size: 0.9rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
+
     <div class="container">
         <h1>DanceSync</h1>
-        <input type="file" id="videoInput" accept="video/*" style="display:none">
-        <button class="btn" onclick="document.getElementById('videoInput').click()">SELECT VIDEO</button>
-        <button class="btn" style="background:#222; color:#fff" onclick="processVideo()">SYNC AUDIO</button>
+        <p class="subtitle">Automatic High-Quality Audio Matching</p>
         
-        <p id="status"></p>
+        <input type="file" id="videoInput" accept="video/*" style="display:none">
+        
+        <button class="btn btn-select" onclick="document.getElementById('videoInput').click()">CHOOSE VIDEO</button>
+        <button class="btn btn-sync" id="syncBtn" onclick="processVideo()">SYNC AUDIO</button>
+        
+        <div id="status"></div>
 
         <div id="result">
             <video id="previewVideo" playsinline controls></video>
+            
             <div class="song-card">
-                <img id="albumArt" src="">
-                <div>
-                    <b id="songTitle"></b><br>
-                    <span id="songArtist" style="color:#666"></span>
+                <img id="albumArt" src="" alt="Album Art">
+                <div class="song-info">
+                    <b id="songTitle">Song Title</b>
+                    <span id="songArtist">Artist Name</span>
                 </div>
             </div>
-            <button class="btn" id="playBtn">PREVIEW SYNC</button>
-            <button class="btn btn-download" id="downloadBtn">DOWNLOAD VIDEO</button>
+
+            <button class="btn btn-download" id="downloadBtn">DOWNLOAD HQ VIDEO</button>
         </div>
     </div>
 
     <script>
-        let currentData = null;
+        // REPLACE THIS URL with your actual Render backend URL
+        const BACKEND_URL = "https://dancesync-backend.onrender.com";
+        
+        let currentSyncData = null;
 
         async function processVideo() {
-    const status = document.getElementById('status');
-    const resultDiv = document.getElementById('result');
-    const file = document.getElementById('videoInput').files[0];
-    
-    if(!file) return alert("Please select a video first!");
-
-    // Reset UI
-    status.innerText = "Processing... (Finding a match)";
-    resultDiv.style.display = 'none';
-    document.getElementById('previewVideo').src = URL.createObjectURL(file);
-
-    const formData = new FormData();
-    formData.append('video', file);
-
-    try {
-        const response = await fetch('https://dancesync-backend.onrender.com/upload', { 
-            method: 'POST', 
-            body: formData 
-        });
-        
-        const data = await response.json();
-
-        if (response.ok && data.status === 'success') {
-            status.innerText = "Match Found!";
-            currentData = data; // Store for the download/merge step
+            const status = document.getElementById('status');
+            const resultDiv = document.getElementById('result');
+            const syncBtn = document.getElementById('syncBtn');
+            const fileInput = document.getElementById('videoInput');
+            const file = fileInput.files[0];
             
-            resultDiv.style.display = 'block';
-            document.getElementById('downloadBtn').style.display = 'block';
-            document.getElementById('songTitle').innerText = data.title;
-            document.getElementById('songArtist').innerText = data.artist;
-            document.getElementById('albumArt').src = data.album_art;
-        } else {
-            // This is where it was getting stuck!
-            status.innerText = "❌ No match found. Try a clearer audio clip.";
-            console.log("Server response:", data);
+            if(!file) return alert("Please select a video file first!");
+
+            // UI Preparation
+            status.innerText = "Processing... (Finding Match)";
+            resultDiv.style.display = 'none';
+            syncBtn.disabled = true;
+            syncBtn.innerText = "ANALYZING...";
+            
+            const formData = new FormData();
+            formData.append('video', file);
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/upload`, { 
+                    method: 'POST', 
+                    body: formData 
+                });
+                
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    status.innerText = "MATCH FOUND!";
+                    currentSyncData = data; 
+                    
+                    // Show result UI
+                    resultDiv.style.display = 'block';
+                    document.getElementById('downloadBtn').style.display = 'block';
+                    document.getElementById('songTitle').innerText = data.title;
+                    document.getElementById('songArtist').innerText = data.artist;
+                    document.getElementById('albumArt').src = data.album_art;
+                    document.getElementById('previewVideo').src = URL.createObjectURL(file);
+                } else {
+                    status.innerText = "❌ NO MATCH (TRY A CLEARER CLIP)";
+                }
+            } catch (e) { 
+                status.innerText = "❌ CONNECTION ERROR";
+                console.error(e);
+            } finally {
+                syncBtn.disabled = false;
+                syncBtn.innerText = "SYNC AUDIO";
+            }
         }
-    } catch (e) { 
-        status.innerText = "❌ Connection Error. Is the backend awake?"; 
-        console.error(e);
-    }
-}
+
+        async function downloadHQ() {
+            const status = document.getElementById('status');
+            const dlBtn = document.getElementById('downloadBtn');
+            
+            if(!currentSyncData) return;
+
+            status.innerText = "BUILDING HQ VIDEO (30-60S)...";
+            dlBtn.disabled = true;
+            dlBtn.innerText = "⌛ PROCESSING...";
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/merge`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        preview_url: currentSyncData.preview_url,
+                        offset: currentSyncData.offset,
+                        video_file: currentSyncData.video_file 
+                    })
+                });
+
+                if (!response.ok) throw new Error("Merge failed");
+
+                // Handle the file download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Synced_${currentSyncData.title.replace(/\s+/g, '_')}.mp4`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                status.innerText = "✅ DOWNLOAD READY!";
+            } catch (e) {
+                status.innerText = "❌ ERROR CREATING VIDEO";
+                console.error(e);
+            } finally {
+                dlBtn.disabled = false;
+                dlBtn.innerText = "DOWNLOAD HQ VIDEO";
+            }
+        }
+
+        // Attach event listener
+        document.getElementById('downloadBtn').onclick = downloadHQ;
     </script>
 </body>
 </html>
