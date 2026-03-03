@@ -12,4 +12,4 @@ COPY . .
 
 # Run the app with gunicorn so that production logs (and Render) match
 # expectations and the PORT env var is respected by the config file.
-CMD ["gunicorn", "app:app", "-c", "gunicorn_conf.py"]
+CMD gunicorn -b 0.0.0.0:$PORT --timeout 600 app:app
